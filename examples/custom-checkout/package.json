@@ -1,0 +1,15 @@
+{
+  "name": "shipbill-example-custom-checkout",
+  "private": true,
+  "type": "module",
+  "description": "Your own payment page on ShipBill's payment intents: the intent created on the server for its own order, the methods with their labels and amounts, ShipBill.mount for the provider's page or fields, and the return page.",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@shipbill/node": "^1.0.0"
+  }
+}

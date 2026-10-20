@@ -1,0 +1,15 @@
+{
+  "name": "shipbill-example-pricing-page",
+  "private": true,
+  "type": "module",
+  "description": "A web app selling two subscription products with ShipBill: the checkout created on the server for the signed-in user, the embedded checkout, and the webhook that upgrades them.",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@shipbill/node": "^1.0.0"
+  }
+}

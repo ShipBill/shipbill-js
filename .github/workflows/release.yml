@@ -1,0 +1,130 @@
+# The only way anything is published (README, "Releasing"). A maintainer pushes a tag such as v1.4.0 on main;
+# the run waits in the `release` environment until a maintainer approves it. No npm token exists: npm
+# trusts this workflow (trusted publishing) and records which commit and run built each version (provenance).
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: write # the GitHub release, with the script's integrity hash
+      id-token: write # npm trusted publishing and provenance
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: The tag is on main
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          # No dependency cache in the run that publishes: a poisoned one could reach the OIDC token.
+          package-manager-cache: false
+      # Trusted publishing needs npm 11.5.1 or later.
+      - run: npm install --global npm@11
+
+      # 1. Check: from the lockfile, build and test, then against ShipBill's current release.
+      - run: bun install --frozen-lockfile
+      - run: bun scripts/release-check.ts "$GITHUB_REF_NAME"
+      - run: bunx playwright-core install --with-deps chromium
+      - run: bun run check
+      - run: bun run contract
+      - name: The server SDK against ShipBill's API (test mode)
+        run: bun test packages/node/test/live.test.ts
+        env:
+          SHIPBILL_TEST_SECRET_KEY: ${{ secrets.SHIPBILL_TEST_SECRET_KEY }}
+
+      # 2. Publish to npm. A version already published (a re-run after a later step failed) is left as it is.
+      - name: Publish @shipbill/js and @shipbill/node
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          for pkg in js node; do
+            name="@shipbill/$pkg"
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "$name@$version is already published"
+            else
+              (cd "packages/$pkg" && npm publish --provenance --access public)
+            fi
+          done
+
+      # 3. Upload shipbill.js and its mount files: the exact release once and never again, then the current 1.x.
+      - name: Upload shipbill.js to js.shipbill.io
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.SCRIPT_BUCKET_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.SCRIPT_BUCKET_SECRET }}
+          AWS_DEFAULT_REGION: auto
+          ENDPOINT: ${{ secrets.SCRIPT_BUCKET_ENDPOINT }}
+          BUCKET: ${{ vars.SCRIPT_BUCKET }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          major="${version%%.*}"
+          file=packages/browser/dist/shipbill.js
+          put() {
+            aws s3api put-object --endpoint-url "$ENDPOINT" --bucket "$BUCKET" --key "$1" --body "$file" \
+              --content-type "text/javascript; charset=utf-8" --cache-control "$2" "${@:3}"
+          }
+          # Written once: if this release's file exists, it must be byte-for-byte this build.
+          once() {
+            if ! put "v$version/$1" "public, max-age=31536000, immutable" --if-none-match "*"; then
+              aws s3 cp --endpoint-url "$ENDPOINT" "s3://$BUCKET/v$version/$1" /tmp/published.js
+              cmp /tmp/published.js "$file" || { echo "v$version/$1 exists and differs: never overwritten"; exit 1; }
+            fi
+          }
+          # Each provider's mount file first, in this release's folder only: shipbill.js loads it from there, by
+          # its pinned integrity, so a cached /v1/shipbill.js never meets a newer one.
+          for file in packages/browser/dist/mount-*.js; do once "$(basename "$file")"; done
+          # The bucket's CORS rule, before any core that relies on it is published: subresource integrity on a
+          # cross-origin script needs Access-Control-Allow-Origin, and the rule is the bucket's one-time CORS setup:
+          # this token only writes files. S3 and R2 answer only with an Origin.
+          mount="$(basename "$(ls packages/browser/dist/mount-*.js | head -1)")"
+          allow="$(curl -sS -o /dev/null -D - -H "Origin: https://shop.example" "https://js.shipbill.io/v$version/$mount" \
+            | tr -d '\r' | awk -F': ' 'tolower($1) == "access-control-allow-origin" { print $2 }')"
+          if [ "$allow" != "*" ]; then
+            echo "js.shipbill.io/v$version/$mount answers Access-Control-Allow-Origin '${allow:-(none)}', not '*': set the bucket's CORS rule, then run the release again"
+            exit 1
+          fi
+          file=packages/browser/dist/shipbill.js
+          once shipbill.js
+          put "v$major/shipbill.js" "public, max-age=300"
+
+      # 4. Publish the integrity hash, for sites that pin this exact release.
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          integrity="sha384-$(openssl dgst -sha384 -binary packages/browser/dist/shipbill.js | openssl base64 -A)"
+          notes=$(cat <<NOTES
+          ## shipbill.js $version
+
+          Always current within version ${version%%.*}:
+
+              <script src="https://js.shipbill.io/v${version%%.*}/shipbill.js"></script>
+
+          This exact release, pinned:
+
+              <script src="https://js.shipbill.io/v$version/shipbill.js" integrity="$integrity" crossorigin="anonymous"></script>
+
+          npm: @shipbill/js@$version, @shipbill/node@$version (with provenance). Changes: CHANGELOG.md.
+          NOTES
+          )
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes "$notes"

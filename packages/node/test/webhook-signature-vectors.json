@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "description": "ShipBill's webhook signature cases, written by its own signer. For each case, verify `body` (exactly as given, as UTF-8 bytes) against `header` with `secret`, taking `now` as the current time and `tolerance` seconds either side: the result must be `valid`, and a refusal must be for `reason`. Each case has one fault at most.",
+  "header": "ShipBill-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256 of `<t>.<raw body>` with the signing secret>; one v1 per secret while a secret is being rotated; other keys are ignored",
+  "tolerance": 300,
+  "reasons": {
+    "missing": "There is no header, or it is empty.",
+    "malformed": "The header has no t=<digits>, or no v1=<64 hex digits>.",
+    "mismatch": "No v1 is the HMAC of this timestamp and body with this secret.",
+    "outside_tolerance": "The signature matches, but t is more than `tolerance` seconds from now, either side."
+  },
+  "cases": [
+    {
+      "name": "valid",
+      "description": "The published example.",
+      "secret": "whsec_test_4eC39HqLyjWDarjtT1zdp7dc",
+      "body": "{\"id\":\"evt_test\",\"type\":\"webhook.test\"}",
+      "header": "t=1791105600,v1=310bdaff3676541813a3f3bca3c49012b9bcd5d0c1810de0ed2a8a03b6dd41dc",
+      "now": 1791105610,
+      "valid": true
+    },
+    {
+      "name": "valid_utf8_body",
+      "description": "A body that isn't only ASCII: sign and check its UTF-8 bytes.",
+      "secret": "whsec_test_4eC39HqLyjWDarjtT1zdp7dc",
+      "body": "{\"id\":\"evt_test_utf8\",\"type\":\"webhook.test\",\"data\":{\"object\":{\"name\":\"Kopi susu — Café Ñandú ₹\"}}}",
+      "header": "t=1791105600,v1=38e557b38c2316d6d46fb43c6afa6cda055ca2900f807788d453085b03a2f20d",
+      "now": 1791105610,
+      "valid": true
+    },
+    {
+      "name": "rotation_new_secret",
+      "description": "Two v1 values during a rotation, checked with the new secret.",
+      "secret": "whsec_test_rotated_9xQe2LmKf7TbVw3R",
+      "body": "{\"id\":\"evt_test\",\"type\":\"webhook.test\"}",
+      "header": "t=1791105600,v1=f40844275ebc7ad4079f8460338b77949de63c77ec1766c6b7caee9d63f1e8a8,v1=310bdaff3676541813a3f3bca3c49012b9bcd5d0c1810de0ed2a8a03b6dd41dc",
+      "now": 1791105610,
+      "valid": true
+    },
+    {
+      "name": "rotation_old_secret",
+      "description": "The same header, checked with the old secret.",
+      "secret": "whsec_test_4eC39HqLyjWDarjtT1zdp7dc",
+      "body": "{\"id\":\"evt_test\",\"type\":\"webhook.test\"}",
+      "header": "t=1791105600,v1=f40844275ebc7ad4079f8460338b77949de63c77ec1766c6b7caee9d63f1e8a8,v1=310bdaff3676541813a3f3bca3c49012b9bcd5d0c1810de0ed2a8a03b6dd41dc",
+      "now": 1791105610,
+      "valid": true
+    },
+    {
+      "name": "unknown_key_ignored",
+      "description": "A key the library doesn't know is skipped, not refused.",
+      "secret": "whsec_test_4eC39HqLyjWDarjtT1zdp7dc",
+      "body": "{\"id\":\"evt_test\",\"type\":\"webhook.test\"}",
+      "header": "t=1791105600,v0=0000000000000000000000000000000000000000000000000000000000000000,v1=310bdaff3676541813a3f3bca3c49012b9bcd5d0c1810de0ed2a8a03b6dd41dc",
+      "now": 1791105610,
+      "valid": true
+    },
+    {
+      "name": "tolerance_edge",
+      "description": "Exactly `tolerance` seconds old is still accepted.",
+      "secret": "whsec_test_4eC39HqLyjWDarjtT1zdp7dc",
+      "body": "{\"id\":\"evt_test\",\"type\":\"webhook.test\"}",
+      "header": "t=1791105600,v1=310bdaff3676541813a3f3bca3c49012b9bcd5d0c1810de0ed2a8a03b6dd41dc",
+      "now": 1791105900,
+      "valid": true
+    },
+    {
+      "name": "expired",
+      "description": "One second past the tolerance.",
+      "secret": "whsec_test_4eC39HqLyjWDarjtT1zdp7dc",
+      "body": "{\"id\":\"evt_test\",\"type\":\"webhook.test\"}",
+      "header": "t=1791105600,v1=310bdaff3676541813a3f3bca3c49012b9bcd5d0c1810de0ed2a8a03b6dd41dc",
+      "now": 1791105901,
+      "valid": false,
+      "reason": "outside_tolerance"
+    },
+    {
+      "name": "from_the_future",
+      "description": "More than the tolerance ahead of now.",
+      "secret": "whsec_test_4eC39HqLyjWDarjtT1zdp7dc",
+      "body": "{\"id\":\"evt_test\",\"type\":\"webhook.test\"}",
+      "header": "t=1791105600,v1=310bdaff3676541813a3f3bca3c49012b9bcd5d0c1810de0ed2a8a03b6dd41dc",
+      "now": 1791105299,
+      "valid": false,
+      "reason": "outside_tolerance"
+    },
+    {
+      "name": "tampered_body",
+      "description": "One character of the body changed after signing.",
+      "secret": "whsec_test_4eC39HqLyjWDarjtT1zdp7dc",
+      "body": "{\"id\":\"evt_test\",\"type\":\"webhook.fake\"}",
+      "header": "t=1791105600,v1=310bdaff3676541813a3f3bca3c49012b9bcd5d0c1810de0ed2a8a03b6dd41dc",
+      "now": 1791105610,
+      "valid": false,
+      "reason": "mismatch"
+    },
+    {
+      "name": "wrong_secret",
+      "description": "Signed with a different secret.",
+      "secret": "whsec_test_rotated_9xQe2LmKf7TbVw3R",
+      "body": "{\"id\":\"evt_test\",\"type\":\"webhook.test\"}",
+      "header": "t=1791105600,v1=310bdaff3676541813a3f3bca3c49012b9bcd5d0c1810de0ed2a8a03b6dd41dc",
+      "now": 1791105610,
+      "valid": false,
+      "reason": "mismatch"
+    },
+    {
+      "name": "malformed_v1",
+      "description": "A v1 that isn't 64 hex digits.",
+      "secret": "whsec_test_4eC39HqLyjWDarjtT1zdp7dc",
+      "body": "{\"id\":\"evt_test\",\"type\":\"webhook.test\"}",
+      "header": "t=1791105600,v1=abc",
+      "now": 1791105610,
+      "valid": false,
+      "reason": "malformed"
+    },
+    {
+      "name": "no_timestamp",
+      "description": "A valid v1 without its t.",
+      "secret": "whsec_test_4eC39HqLyjWDarjtT1zdp7dc",
+      "body": "{\"id\":\"evt_test\",\"type\":\"webhook.test\"}",
+      "header": "v1=310bdaff3676541813a3f3bca3c49012b9bcd5d0c1810de0ed2a8a03b6dd41dc",
+      "now": 1791105610,
+      "valid": false,
+      "reason": "malformed"
+    },
+    {
+      "name": "empty_header",
+      "description": "The header is present but empty.",
+      "secret": "whsec_test_4eC39HqLyjWDarjtT1zdp7dc",
+      "body": "{\"id\":\"evt_test\",\"type\":\"webhook.test\"}",
+      "header": "",
+      "now": 1791105610,
+      "valid": false,
+      "reason": "missing"
+    }
+  ]
+}

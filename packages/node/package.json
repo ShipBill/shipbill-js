@@ -1,0 +1,52 @@
+{
+  "name": "@shipbill/node",
+  "version": "1.0.0",
+  "description": "ShipBill from your server: the API client, typed from ShipBill's specification, and webhook signature verification.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shipbill/shipbill-js.git",
+    "directory": "packages/node"
+  },
+  "bugs": "https://github.com/shipbill/shipbill-js/issues",
+  "keywords": [
+    "shipbill",
+    "payments",
+    "checkout",
+    "webhooks",
+    "subscriptions"
+  ],
+  "engines": {
+    "node": ">=20.3"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "bun ../../scripts/build-package.ts --target node",
+    "typecheck": "tsc --noEmit -p . && tsc -p tsconfig.test.json"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

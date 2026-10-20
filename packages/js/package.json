@@ -1,0 +1,70 @@
+{
+  "name": "@shipbill/js",
+  "version": "1.0.0",
+  "description": "Loads shipbill.js — ShipBill's checkout over your page, buy buttons, and price previews — in apps with a bundler, typed, with a React hook.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shipbill/shipbill-js.git",
+    "directory": "packages/js"
+  },
+  "bugs": "https://github.com/shipbill/shipbill-js/issues",
+  "keywords": [
+    "shipbill",
+    "checkout",
+    "payments",
+    "react"
+  ],
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./react": {
+      "import": {
+        "types": "./dist/react.d.ts",
+        "default": "./dist/react.js"
+      },
+      "require": {
+        "types": "./dist/react.d.cts",
+        "default": "./dist/react.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "react": "^19.0.0"
+  },
+  "scripts": {
+    "build": "bun ../../scripts/build-package.ts --target browser",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

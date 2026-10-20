@@ -1,0 +1,15 @@
+{
+  "name": "shipbill-example-webhook-receiver",
+  "private": true,
+  "type": "module",
+  "description": "The smallest correct ShipBill webhook receiver: verify, skip repeats, answer quickly.",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=20.3"
+  },
+  "dependencies": {
+    "@shipbill/node": "^1.0.0"
+  }
+}
