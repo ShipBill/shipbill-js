@@ -2,11 +2,11 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { ContractError, DEFAULT_SPEC, generate, loadSpec, OUTPUTS } from "./generate";
 
-// The contract test (docs: README, "How it fits with ShipBill"): regenerates the SDK's types and methods from
-// a ShipBill deployment's current specification and checks they are what this repository has committed. It
-// fails if ShipBill added an operation the SDK hasn't named, removed or renamed anything the SDK uses, or
-// changed the embedded checkout's protocol; and if the committed files are simply behind. It also fetches the webhook
-// signature cases published beside the specification and fails if they differ from the copy the tests run.
+// The contract test: regenerates the SDK's types and methods from a ShipBill deployment's current specification
+// and checks they are what this repository has committed. It fails if ShipBill added an operation the SDK hasn't
+// named, removed or renamed anything the SDK uses, or changed the embedded checkout's protocol; and if the
+// committed files are simply behind. It also fetches the webhook signature cases published beside the
+// specification and fails if they differ from the copy the tests run.
 //
 //   bun scripts/contract.ts [specification URL or file]     default: https://api.shipbill.io/v1/openapi.json
 //

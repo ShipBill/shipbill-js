@@ -86,4 +86,4 @@ for await (const event of shipbill.events.list({ created_after: lastSeen })) app
 
 **Errors** are classes by type, each with `code`, `message`, `param` (the field at fault), `statusCode`, and `requestId`: `ShipBillInvalidRequestError`, `ShipBillAuthenticationError`, `ShipBillPermissionError`, `ShipBillRateLimitError`, `ShipBillIdempotencyError`, `ShipBillAPIError`, and `ShipBillConnectionError` when ShipBill couldn't be reached. All extend `ShipBillError`.
 
-MIT licence. Source, issues, and releases: [github.com/shipbill/shipbill-js](https://github.com/shipbill/shipbill-js).
+MIT licence. Source, issues, and releases: [github.com/ShipBill/shipbill-js](https://github.com/ShipBill/shipbill-js).

@@ -1,6 +1,6 @@
 # @shipbill/js
 
-Loads [`shipbill.js`](https://github.com/shipbill/shipbill-js) — ShipBill's checkout over your page, buy buttons, and price previews — in apps with a bundler, typed. The script itself always comes from `js.shipbill.io`, so your site runs the current release of version 1 without updating anything; this package never bundles it.
+Loads [`shipbill.js`](https://github.com/ShipBill/shipbill-js) — ShipBill's checkout over your page, buy buttons, and price previews — in apps with a bundler, typed. The script itself always comes from `js.shipbill.io`, so your site runs the current release of version 1 without updating anything; this package never bundles it.
 
 ```sh
 npm install @shipbill/js
@@ -43,7 +43,7 @@ function BuyPro() {
 
 ## Pinning a release
 
-To run one exact release, verified by the browser, pass its address and integrity hash from its [release notes](https://github.com/shipbill/shipbill-js/releases):
+To run one exact release, verified by the browser, pass its address and integrity hash from its [release notes](https://github.com/ShipBill/shipbill-js/releases):
 
 ```ts
 await loadShipBill("pk_live_…", {

@@ -10,10 +10,10 @@
     "generate": "bun scripts/generate.ts",
     "build": "bun run --filter './packages/*' build",
     "typecheck": "bun run --filter './packages/*' typecheck",
-    "test": "bun test packages examples",
+    "test": "bun test packages examples scripts",
     "lint": "biome check . && bun scripts/check-imports.ts",
     "contract": "bun scripts/contract.ts",
-    "check": "bun run lint && bun run typecheck && bun run build && bun scripts/check-published.ts && bun run test"
+    "check": "bun run lint && bun run typecheck && bun run build && bun scripts/check-published.ts && bun scripts/check-repository.ts && bun run test"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

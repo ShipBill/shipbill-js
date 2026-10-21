@@ -2,11 +2,10 @@ import { readdir, readFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// The SDK never imports the main ShipBill project (docs: README, "How it fits with ShipBill"). This folder
-// sits inside ShipBill's own checkout on a developer's machine, where module lookup walking up the tree would
-// quietly find ShipBill's code; this check refuses any import that leaves the SDK repository or names one of
-// ShipBill's internal packages. The release pipeline also builds from a clean checkout of this repository
-// alone, where such an import can't resolve.
+// The SDK never imports the main ShipBill project. This folder sits inside ShipBill's own checkout on a
+// developer's machine, where module lookup walking up the tree would quietly find ShipBill's code; this check
+// refuses any import that leaves the SDK repository or names one of ShipBill's internal packages. The release
+// pipeline also builds from a clean checkout of this repository alone, where such an import can't resolve.
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const INTERNAL = /^@shipbill\/(shared|server|web)(\/|$)/;

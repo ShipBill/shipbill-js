@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 
-// Before anything is published (README, "Releasing"): the tag, every package's version, the version each
-// package reports at runtime, and the changelog all agree.
+// Before anything is published: the tag, every package's version, the version each package reports at runtime,
+// and the changelog all agree.
 //
 //   bun scripts/release-check.ts v1.4.0
 

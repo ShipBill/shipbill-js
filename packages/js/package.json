@@ -6,10 +6,10 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/shipbill/shipbill-js.git",
+    "url": "git+https://github.com/ShipBill/shipbill-js.git",
     "directory": "packages/js"
   },
-  "bugs": "https://github.com/shipbill/shipbill-js/issues",
+  "bugs": "https://github.com/ShipBill/shipbill-js/issues",
   "keywords": [
     "shipbill",
     "checkout",

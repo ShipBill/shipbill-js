@@ -1,6 +1,6 @@
-# The only way anything is published (README, "Releasing"). A maintainer pushes a tag such as v1.4.0 on main;
-# the run waits in the `release` environment until a maintainer approves it. No npm token exists: npm
-# trusts this workflow (trusted publishing) and records which commit and run built each version (provenance).
+# The only way anything is published. A maintainer pushes a tag such as v1.4.0 on main; the run waits in
+# the `release` environment until a maintainer approves it. No npm token exists: npm trusts this workflow
+# (trusted publishing) and records which commit and run built each version (provenance).
 name: Release
 
 on:

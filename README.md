@@ -87,7 +87,7 @@ The buyer comes back to your `return_url` with `?payment_intent=pi_…`: retriev
 
 `/v1/shipbill.js` is always the latest 1.x release. Within a major version ShipBill only adds: nothing a 1.x integration relies on is removed or renamed. A breaking change is a new major version at `/v2/shipbill.js`, and `/v1/` keeps working. The npm packages follow the same rule, by semantic versioning.
 
-To run one exact release, verified by the browser, load its own address with the integrity hash from its [release notes](https://github.com/shipbill/shipbill-js/releases):
+To run one exact release, verified by the browser, load its own address with the integrity hash from its [release notes](https://github.com/ShipBill/shipbill-js/releases):
 
 ```html
 <script src="https://js.shipbill.io/v1.0.0/shipbill.js" integrity="sha384-…" crossorigin="anonymous"></script>

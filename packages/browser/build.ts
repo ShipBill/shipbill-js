@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
 
 // Builds dist/shipbill.js: one readable file with no dependencies, small enough to read in full. Releases
-// upload it to js.shipbill.io and publish its integrity hash (README, "Releasing"). Beside it, one small file per
-// provider whose fields `ShipBill.mount` shows (dist/mount-stripe.js), built first: shipbill.js carries each one's
-// integrity and loads it from its own release's folder only when a page mounts that provider's fields.
+// upload it to js.shipbill.io and publish its integrity hash. Beside it, one small file per provider whose
+// fields `ShipBill.mount` shows (dist/mount-stripe.js), built first: shipbill.js carries each one's integrity
+// and loads it from its own release's folder only when a page mounts that provider's fields.
 
 /** The providers with a mount file: src/mount-<provider>.ts. */
 export const MOUNTS = ["stripe"] as const;
@@ -23,7 +23,7 @@ async function bundle(outdir: string, name: string, define: Record<string, strin
     minify: false,
     sourcemap: "none",
     define,
-    banner: `/*! ${name}.js ${version} · MIT · https://github.com/shipbill/shipbill-js */`,
+    banner: `/*! ${name}.js ${version} · MIT · https://github.com/ShipBill/shipbill-js */`,
   });
   if (!result.success) throw new AggregateError(result.logs, `${name}.js didn't build`);
   const code = await readFile(`${outdir}/${name}.js`);
