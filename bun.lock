@@ -32,11 +32,11 @@
     },
     "packages/browser": {
       "name": "@shipbill/browser",
-      "version": "1.0.0",
+      "version": "1.0.1",
     },
     "packages/js": {
       "name": "@shipbill/js",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "devDependencies": {
         "@types/react": "^19.0.0",
         "react": "^19.0.0",
@@ -50,7 +50,7 @@
     },
     "packages/node": {
       "name": "@shipbill/node",
-      "version": "1.0.0",
+      "version": "1.0.1",
     },
   },
   "packages": {

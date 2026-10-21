@@ -206,7 +206,9 @@ class Checkout {
     if (theme && /^(light|dark|system)$/.test(theme)) src.searchParams.set(EMBED_FRAME.theme, theme);
 
     const frame = document.createElement("iframe");
-    frame.title = "Checkout";
+    // Named for screen readers by aria-label (the reflected property, the shortest way to set it): a title would
+    // show as a "Checkout" tooltip over the checkout.
+    frame.ariaLabel = "Checkout";
     frame.src = src.href;
     frame.allow = "payment";
     style(frame, {
@@ -219,7 +221,10 @@ class Checkout {
       padding: "0",
       zIndex: "2147483647",
       background: "transparent",
-      colorScheme: "normal",
+      // The checkout's own page is light at its root, whatever its theme; where a frame's color scheme differs from
+      // the page inside it, browsers paint the frame opaque. "normal" would take this page's <meta name="color-scheme">,
+      // so a page that says dark covered itself with the checkout's background.
+      colorScheme: "light",
       opacity: "0",
     });
     document.body.appendChild(frame);

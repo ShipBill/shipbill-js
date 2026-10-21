@@ -12,6 +12,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { inflateSync } from "node:zlib";
 import { type Browser, chromium, type Page } from "playwright-core";
 import { build } from "../build";
 
@@ -23,6 +24,8 @@ const API = "http://localhost:4711";
 const CHECKOUT = "http://localhost:4712";
 const TOKEN = "tok_aaaaaaaaaaaaaaaaaaaa";
 const SILENT = "tok_silentsilentsilent";
+/** This release's version, as every package states it. */
+const { version: VERSION } = await Bun.file(new URL("../package.json", import.meta.url)).json();
 
 const received: { path: string; auth: string | null; origin: string | null; body: unknown }[] = [];
 let script = "";
@@ -43,8 +46,23 @@ const sitePage = `<!doctype html><html><head><meta charset="utf-8"><title>Shop</
   ShipBill.init("pk_test_good", { apiUrl: ${JSON.stringify(API)}, checkoutUrl: ${JSON.stringify(CHECKOUT)} });
 </script></body></html>`;
 
-/** The checkout stand-in: says it's ready unless silent, and posts whatever the test asks to the site. */
-const checkoutPage = (path: string) => `<!doctype html><html><body style="background:transparent">
+/** A merchant's page whose own color scheme is dark, painted in red and blue stripes to see through the frame. */
+const darkPage = `<!doctype html><html><head><meta charset="utf-8"><meta name="color-scheme" content="dark">
+<title>Night</title></head><body style="margin:0;min-height:100vh;background:repeating-linear-gradient(90deg,#f00 0 10px,#00f 10px 20px)">
+<button id="buy" data-shipbill-product="prod_basic" style="margin:40px">Buy Basic</button>
+<script src="/shipbill.js"></script>
+<script>
+  window.log = [];
+  document.addEventListener("shipbill:ready", () => log.push("ready"));
+  ShipBill.init("pk_test_good", { apiUrl: ${JSON.stringify(API)}, checkoutUrl: ${JSON.stringify(CHECKOUT)} });
+</script></body></html>`;
+
+/**
+ * The checkout stand-in: says it's ready unless silent, and posts whatever the test asks to the site. Its root is
+ * light and its page says it supports both schemes, as the checkout's does.
+ */
+const checkoutPage = (path: string) => `<!doctype html><html style="color-scheme:light">
+<head><meta name="color-scheme" content="light dark"></head><body style="background:transparent">
 <p id="query"></p><script>
   const params = new URLSearchParams(location.search);
   document.getElementById("query").textContent = location.pathname + location.search;
@@ -77,6 +95,7 @@ const servers = [
         return new Response('<!doctype html><div id="fields"></div><script src="/v1/shipbill.js"></script>', {
           headers: { "Content-Type": "text/html" },
         });
+      if (pathname === "/dark") return new Response(darkPage, { headers: { "Content-Type": "text/html" } });
       if (pathname === "/loader.js")
         return new Response(loader, { headers: { "Content-Type": "text/javascript" } });
       if (pathname === "/blank")
@@ -168,7 +187,7 @@ setDefaultTimeout(30_000);
 
 let browser: Browser;
 let page: Page;
-const frameCount = () => page.locator("iframe[title=Checkout]").count();
+const frameCount = () => page.locator("iframe[aria-label=Checkout]").count();
 const checkoutFrame = () => page.frames().find((frame) => frame.url().startsWith(`${CHECKOUT}/c/`))!;
 const log = () => page.evaluate(() => (window as unknown as { log: string[] }).log);
 
@@ -215,7 +234,7 @@ afterEach(async () => {
 describe("a buy button", () => {
   test("opens the checkout over the page, framed at the checkout's address with this page", async () => {
     await page.click("#buy");
-    await page.locator("iframe[title=Checkout]").waitFor();
+    await page.locator("iframe[aria-label=Checkout]").waitFor();
     expect(received[0]).toEqual({
       path: "/v1/embed/checkout/sessions",
       auth: "Bearer pk_test_good",
@@ -227,22 +246,56 @@ describe("a buy button", () => {
         page: `${SITE}/`,
       },
     });
-    const src = new URL((await page.locator("iframe[title=Checkout]").getAttribute("src")) ?? "");
+    const src = new URL((await page.locator("iframe[aria-label=Checkout]").getAttribute("src")) ?? "");
     expect(src.origin + src.pathname).toBe(`${CHECKOUT}/c/${TOKEN}`);
     expect(Object.fromEntries(src.searchParams)).toEqual({ embed: "1", origin: SITE, page: `${SITE}/` });
 
     await page.waitForFunction(() => (window as unknown as { log: string[] }).log.includes("ready"));
     expect(
-      await page.locator("iframe[title=Checkout]").evaluate((frame) => (frame as HTMLElement).style.opacity),
+      await page
+        .locator("iframe[aria-label=Checkout]")
+        .evaluate((frame) => (frame as HTMLElement).style.opacity),
     ).toBe("1");
     expect(await page.locator("[role=status]").count()).toBe(0);
     expect(await page.evaluate(() => document.documentElement.style.overflow)).toBe("hidden");
+    // Named for screen readers without a tooltip, and light like the checkout's root.
+    const frame = page.locator("iframe[aria-label=Checkout]");
+    expect(await frame.getAttribute("title")).toBeNull();
+    expect(await frame.evaluate((element) => (element as HTMLElement).style.colorScheme)).toBe("light");
+  });
+
+  test("leaves a page whose color scheme is dark showing through", async () => {
+    // Where the frame's color scheme differs from the checkout's root, browsers paint the frame opaque: a frame at
+    // "normal" takes the page's meta tag, so this page was covered.
+    for (const device of ["light", "dark"] as const) {
+      const dark = await (await browser.newContext({ colorScheme: device })).newPage();
+      await dark.goto(`${SITE}/dark`);
+      await dark.click("#buy");
+      await dark.waitForFunction(() => (window as unknown as { log: string[] }).log.includes("ready"));
+      await dark.waitForFunction(
+        () => (document.querySelector("iframe[aria-label=Checkout]") as HTMLElement).style.opacity === "1",
+      );
+      // One pixel, a red stripe's: with one pixel, every PNG filter leaves the bytes as they are.
+      const png = await dark.screenshot({ clip: { x: 5, y: 300, width: 1, height: 1 } });
+      const chunks: Buffer[] = [];
+      for (let at = 8; at < png.length; ) {
+        const length = png.readUInt32BE(at);
+        if (png.toString("ascii", at + 4, at + 8) === "IDAT")
+          chunks.push(png.subarray(at + 8, at + 8 + length));
+        at += 12 + length;
+      }
+      expect({ device, pixel: [...inflateSync(Buffer.concat(chunks)).subarray(1, 4)] }).toEqual({
+        device,
+        pixel: [255, 0, 0],
+      });
+      await dark.context().close();
+    }
   });
 
   test("asks for its own theme with data-shipbill-theme", async () => {
     await page.click("#dark");
-    await page.locator("iframe[title=Checkout]").waitFor();
-    const src = new URL((await page.locator("iframe[title=Checkout]").getAttribute("src")) ?? "");
+    await page.locator("iframe[aria-label=Checkout]").waitFor();
+    const src = new URL((await page.locator("iframe[aria-label=Checkout]").getAttribute("src")) ?? "");
     expect(src.searchParams.get("theme")).toBe("dark");
   });
 
@@ -340,11 +393,11 @@ describe("ShipBill.checkout.open", () => {
 
   test("asks for this window's own theme when given one, and for none otherwise", async () => {
     await page.evaluate((token) => window.ShipBill!.checkout.open(token, { theme: "dark" }), TOKEN);
-    const src = new URL((await page.locator("iframe[title=Checkout]").getAttribute("src")) ?? "");
+    const src = new URL((await page.locator("iframe[aria-label=Checkout]").getAttribute("src")) ?? "");
     expect(src.searchParams.get("theme")).toBe("dark");
     // Anything else isn't a theme: the profile's own applies.
     await page.evaluate((token) => window.ShipBill!.checkout.open(token, { theme: "blue" as never }), TOKEN);
-    const plain = new URL((await page.locator("iframe[title=Checkout]").getAttribute("src")) ?? "");
+    const plain = new URL((await page.locator("iframe[aria-label=Checkout]").getAttribute("src")) ?? "");
     expect(plain.searchParams.has("theme")).toBe(false);
   });
 
@@ -370,7 +423,7 @@ describe("ShipBill.checkout.open", () => {
     await page.clock.install();
     await page.goto(SITE);
     await page.evaluate((token) => window.ShipBill!.checkout.open(token), SILENT);
-    await page.locator("iframe[title=Checkout]").waitFor({ state: "attached" });
+    await page.locator("iframe[aria-label=Checkout]").waitFor({ state: "attached" });
     await page.clock.fastForward(16_000);
     await page.waitForURL(`${CHECKOUT}/c/${SILENT}`);
   });
@@ -466,7 +519,7 @@ describe("ShipBill.mount", () => {
   test("a page that never calls it loads nothing of a provider's", async () => {
     mountRequests.length = 0;
     await page.click("#buy");
-    await page.locator("iframe[title=Checkout]").waitFor();
+    await page.locator("iframe[aria-label=Checkout]").waitFor();
     expect(await stripeLoads()).toBe(0);
     expect(mountRequests).toEqual([]);
   });
@@ -481,7 +534,7 @@ describe("ShipBill.mount", () => {
       async (action) => (await window.ShipBill!.mount(action as never, "#fields")).type,
       STRIPE_ACTION,
     );
-    expect([type, mountRequests]).toEqual(["fields", ["/v1.0.0/mount-stripe.js"]]);
+    expect([type, mountRequests]).toEqual(["fields", [`/v${VERSION}/mount-stripe.js`]]);
 
     // A changed file is refused by the browser, and nothing is mounted.
     await page.goto(SITE);
@@ -634,7 +687,7 @@ describe("@shipbill/js", () => {
       ]);
       return [a?.version, a === b, document.querySelectorAll('script[src="/shipbill.js"]').length];
     }, API);
-    expect(versions).toEqual(["1.0.0", true, 1]);
+    expect(versions).toEqual([VERSION, true, 1]);
   });
 
   test("rejects when the script can't load, and tries again on the next call", async () => {
@@ -651,7 +704,7 @@ describe("@shipbill/js", () => {
       const second = await loadShipBill("pk_test_good", { scriptUrl: "/shipbill.js" });
       return [first, second?.version];
     });
-    expect(outcome).toEqual(["Couldn't load http://localhost:4799/missing.js.", "1.0.0"]);
+    expect(outcome).toEqual(["Couldn't load http://localhost:4799/missing.js.", VERSION]);
   });
 });
 

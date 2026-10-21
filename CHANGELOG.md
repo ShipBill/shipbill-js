@@ -2,7 +2,12 @@
 
 Versions follow [semantic versioning](https://semver.org). All three packages share one version.
 
-## 1.0.0 — 2026-10-20
+## 1.0.1 — 2026-10-21
+
+- `shipbill.js`: the checkout window stays see-through over a page whose own color scheme is dark (`<meta name="color-scheme" content="dark">`, or `light dark` on a device set to dark). Such a page was covered by the checkout's background; the frame is now `color-scheme: light`, like the checkout inside it.
+- `shipbill.js`: the checkout frame is named with `aria-label="Checkout"` instead of `title`, so desktop browsers no longer show a "Checkout" tooltip over the checkout. A test that finds the frame by `iframe[title=Checkout]` should use `iframe[aria-label=Checkout]`.
+
+## 1.0.0 — 2026-10-21
 
 The first release.
 

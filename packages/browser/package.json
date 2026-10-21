@@ -1,6 +1,6 @@
 {
   "name": "@shipbill/browser",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "shipbill.js: ShipBill's checkout over your page, buy buttons, and price previews. Served from https://js.shipbill.io/v1/shipbill.js; not published to npm.",
   "license": "MIT",

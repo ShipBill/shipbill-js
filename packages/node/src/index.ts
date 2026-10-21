@@ -8,7 +8,7 @@ import { webhooks } from "./webhooks.js";
 //   const shipbill = new ShipBill(process.env.SHIPBILL_SECRET_KEY);
 //   const session = await shipbill.checkout.sessions.create({ line_items: [{ product: "prod_…" }], reference: user.id });
 
-export const VERSION = "1.0.0";
+export const VERSION = "1.0.1";
 
 export interface ShipBillConfig {
   /** Milliseconds to wait for each attempt: 30 seconds by default. */

@@ -92,18 +92,28 @@ jobs:
           # Each provider's mount file first, in this release's folder only: shipbill.js loads it from there, by
           # its pinned integrity, so a cached /v1/shipbill.js never meets a newer one.
           for file in packages/browser/dist/mount-*.js; do once "$(basename "$file")"; done
-          # The bucket's CORS rule, before any core that relies on it is published: subresource integrity on a
-          # cross-origin script needs Access-Control-Allow-Origin, and the rule is the bucket's one-time CORS setup:
-          # this token only writes files. S3 and R2 answer only with an Origin.
+          # Served at js.shipbill.io, before any core that relies on it is published: a 200, with one
+          # Access-Control-Allow-Origin, which subresource integrity on a cross-origin script needs. The header comes
+          # from the zone's Transform Rule alone (a CORS policy on the bucket as well doubles it). A 404 carries the
+          # header too, so the answer must be a 200: a file under a <bucket>/ folder, or in another bucket, answers 404.
+          served() {
+            head="$(curl -sS -o /dev/null -D - -H "Origin: https://shop.example" "https://js.shipbill.io/$1" | tr -d '\r')"
+            status="$(printf '%s\n' "$head" | awk 'NR == 1 { print $2 }')"
+            allow="$(printf '%s\n' "$head" | awk -F': ' 'tolower($1) == "access-control-allow-origin" { print $2 }')"
+            if [ "$status" != "200" ]; then
+              echo "js.shipbill.io/$1 answers $status, not 200: check that SCRIPT_BUCKET_ENDPOINT doesn't end in /<bucket> and that SCRIPT_BUCKET is the bucket connected to js.shipbill.io, then run the release again"
+              exit 1
+            fi
+            if [ "$allow" != "*" ]; then
+              echo "js.shipbill.io/$1 answers Access-Control-Allow-Origin '${allow:-(none)}', not '*': the zone's Transform Rule must add it, with no CORS policy on the bucket, then run the release again"
+              exit 1
+            fi
+          }
           mount="$(basename "$(ls packages/browser/dist/mount-*.js | head -1)")"
-          allow="$(curl -sS -o /dev/null -D - -H "Origin: https://shop.example" "https://js.shipbill.io/v$version/$mount" \
-            | tr -d '\r' | awk -F': ' 'tolower($1) == "access-control-allow-origin" { print $2 }')"
-          if [ "$allow" != "*" ]; then
-            echo "js.shipbill.io/v$version/$mount answers Access-Control-Allow-Origin '${allow:-(none)}', not '*': set the bucket's CORS rule, then run the release again"
-            exit 1
-          fi
+          served "v$version/$mount"
           file=packages/browser/dist/shipbill.js
           once shipbill.js
+          served "v$version/shipbill.js"
           put "v$major/shipbill.js" "public, max-age=300"
 
       # 4. Publish the integrity hash, for sites that pin this exact release.

@@ -1,6 +1,6 @@
 {
   "name": "@shipbill/node",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "ShipBill from your server: the API client, typed from ShipBill's specification, and webhook signature verification.",
   "license": "MIT",
   "type": "module",
