@@ -58,10 +58,10 @@ export interface ErrorBody {
 export const EMBED_PROTOCOL_VERSION = 1;
 export const EMBED_MESSAGE_SOURCE = "shipbill-checkout";
 
-/** The frame's address, on the checkout's origin: `/c/<client_token>?embed=1&origin=<page origin>&page=<page URL>[&theme=<light | dark | system>]`. */
+/** The frame's address, on the checkout's origin: `/c/<client_token>?embed=2&origin=<page origin>&page=<page URL>[&theme=<light | dark | system>]`. */
 export const EMBED_FRAME = {
   path: "/c/",
-  flag: ["embed", "1"],
+  flag: ["embed", "2"],
   origin: "origin",
   page: "page",
   /** Optional: this window's look, in place of the profile's checkout theme. */
