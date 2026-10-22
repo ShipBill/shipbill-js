@@ -2,6 +2,12 @@
 
 Versions follow [semantic versioning](https://semver.org). All three packages share one version.
 
+## 1.0.2 — 2026-10-22
+
+- `shipbill.js`: with Settings → Checkout → Look on **Follow the buyer's device**, the checkout window now turns dark on a dark device in Firefox, in Safari, and in every browser on iPhone. These browsers tell a framed page the device's preference through the frame's color scheme, so 1.0.1's `light` kept the checkout light there, and 1.0.0's `normal` did in Safari. The frame is now `color-scheme: light dark`, like the checkout inside it, and stays see-through over a page whose own color scheme is dark.
+- `shipbill.js`: the frame's address says `embed=2` instead of `embed=1`, so the checkout knows its frame is `light dark`. Checkouts opened by 1.0.1 and 1.0.0 (`embed=1`) look as they did.
+- README: says the checkout's look is your profile's Look. A `theme` you pass applies only when **Let my website choose the embedded checkout's look** is on in Settings → Checkout; otherwise it is ignored, and the browser's console says so.
+
 ## 1.0.1 — 2026-10-21
 
 - `shipbill.js`: the checkout window stays see-through over a page whose own color scheme is dark (`<meta name="color-scheme" content="dark">`, or `light dark` on a device set to dark). Such a page was covered by the checkout's background; the frame is now `color-scheme: light`, like the checkout inside it.

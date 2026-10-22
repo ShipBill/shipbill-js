@@ -58,10 +58,14 @@ const darkPage = `<!doctype html><html><head><meta charset="utf-8"><meta name="c
 </script></body></html>`;
 
 /**
- * The checkout stand-in: says it's ready unless silent, and posts whatever the test asks to the site. Its root is
- * light and its page says it supports both schemes, as the checkout's does.
+ * The checkout stand-in: says it's ready unless silent, and posts whatever the test asks to the site. Its root's color
+ * scheme is the checkout's for the frame that opened it, `light dark` for `embed=2` and `light` for the `embed=1` of
+ * earlier releases, and its page says it supports both schemes, as the checkout's does.
  */
-const checkoutPage = (path: string) => `<!doctype html><html style="color-scheme:light">
+const checkoutPage = (
+  path: string,
+  embed: string | null,
+) => `<!doctype html><html style="color-scheme:${embed === "2" ? "light dark" : "light"}">
 <head><meta name="color-scheme" content="light dark"></head><body style="background:transparent">
 <p id="query"></p><script>
   const params = new URLSearchParams(location.search);
@@ -177,8 +181,10 @@ const servers = [
   Bun.serve({
     port: 4712,
     fetch(request) {
-      const { pathname } = new URL(request.url);
-      return new Response(checkoutPage(pathname), { headers: { "Content-Type": "text/html" } });
+      const { pathname, searchParams } = new URL(request.url);
+      return new Response(checkoutPage(pathname, searchParams.get("embed")), {
+        headers: { "Content-Type": "text/html" },
+      });
     },
   }),
 ];
@@ -248,7 +254,7 @@ describe("a buy button", () => {
     });
     const src = new URL((await page.locator("iframe[aria-label=Checkout]").getAttribute("src")) ?? "");
     expect(src.origin + src.pathname).toBe(`${CHECKOUT}/c/${TOKEN}`);
-    expect(Object.fromEntries(src.searchParams)).toEqual({ embed: "1", origin: SITE, page: `${SITE}/` });
+    expect(Object.fromEntries(src.searchParams)).toEqual({ embed: "2", origin: SITE, page: `${SITE}/` });
 
     await page.waitForFunction(() => (window as unknown as { log: string[] }).log.includes("ready"));
     expect(
@@ -258,15 +264,16 @@ describe("a buy button", () => {
     ).toBe("1");
     expect(await page.locator("[role=status]").count()).toBe(0);
     expect(await page.evaluate(() => document.documentElement.style.overflow)).toBe("hidden");
-    // Named for screen readers without a tooltip, and light like the checkout's root.
+    // Named for screen readers without a tooltip, and "light dark" like the checkout's root for this frame.
     const frame = page.locator("iframe[aria-label=Checkout]");
     expect(await frame.getAttribute("title")).toBeNull();
-    expect(await frame.evaluate((element) => (element as HTMLElement).style.colorScheme)).toBe("light");
+    expect(await frame.evaluate((element) => (element as HTMLElement).style.colorScheme)).toBe("light dark");
   });
 
   test("leaves a page whose color scheme is dark showing through", async () => {
     // Where the frame's color scheme differs from the checkout's root, browsers paint the frame opaque: a frame at
-    // "normal" takes the page's meta tag, so this page was covered.
+    // "normal" takes the page's meta tag, so this page was covered, and one at "light" over the checkout's "light dark"
+    // root turns opaque on a dark device.
     for (const device of ["light", "dark"] as const) {
       const dark = await (await browser.newContext({ colorScheme: device })).newPage();
       await dark.goto(`${SITE}/dark`);

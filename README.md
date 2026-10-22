@@ -60,7 +60,7 @@ if (event.type === "subscription.created") {
 }
 ```
 
-The checkout looks as your profile's **Settings → Checkout → Look** says: light, dark, or the buyer's device. Over a page of a different look, choose this window's own with `theme`: `"light"`, `"dark"`, or `"system"`, as `ShipBill.checkout.open(clientToken, { theme: "dark" })` or a buy button's `data-shipbill-theme="dark"`.
+The checkout looks as your profile's **Settings → Checkout → Look** says: light, dark, or the buyer's device. To let your page choose instead, say because visitors switch it between light and dark, turn on **Let my website choose the embedded checkout's look** under Look, and pass your page's current look as `theme`, `"light"`, `"dark"`, or `"system"`: `ShipBill.checkout.open(clientToken, { theme: pageTheme })`, or a buy button's `data-shipbill-theme`. With the switch off, `theme` is ignored, and the browser's console says so.
 
 `onComplete` and the success page only say the buyer came back. Proof is the signed webhook, or your server asking ShipBill (`shipbill.checkout.sessions.retrieve`) and checking the session's `reference` is the signed-in user.
 
