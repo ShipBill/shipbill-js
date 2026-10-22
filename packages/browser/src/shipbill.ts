@@ -221,10 +221,11 @@ class Checkout {
       padding: "0",
       zIndex: "2147483647",
       background: "transparent",
-      // The checkout's own page is light at its root, whatever its theme; where a frame's color scheme differs from
-      // the page inside it, browsers paint the frame opaque. "normal" would take this page's <meta name="color-scheme">,
-      // so a page that says dark covered itself with the checkout's background.
-      colorScheme: "light",
+      // The checkout's own page is "light dark" at its root for this frame, so both follow the buyer's device; where
+      // a frame's color scheme differs from the page inside it, browsers paint the frame opaque. Firefox and Safari
+      // tell the page inside the device's preference through this value, so "light" kept the checkout light there.
+      // "normal" would take this page's <meta name="color-scheme">, so a page that says dark covered itself.
+      colorScheme: "light dark",
       opacity: "0",
     });
     document.body.appendChild(frame);

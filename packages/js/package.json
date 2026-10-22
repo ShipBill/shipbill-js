@@ -1,6 +1,6 @@
 {
   "name": "@shipbill/js",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Loads shipbill.js — ShipBill's checkout over your page, buy buttons, and price previews — in apps with a bundler, typed, with a React hook.",
   "license": "MIT",
   "type": "module",
