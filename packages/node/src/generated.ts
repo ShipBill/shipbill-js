@@ -628,7 +628,7 @@ export interface CheckoutSessionCreateParams {
     /** 1 to 99; a subscription is 1. */
     quantity?: number;
   }[];
-  /** A custom amount in the currency's smallest unit, instead of line_items. Secret key only. */
+  /** A custom amount in the currency's smallest unit, instead of line_items. Secret key only. A one-time payment, never offered to a merchant of record, which sells only products: use line_items for those. */
   amount?: number;
   /** With amount: a three-letter currency code, such as USD. */
   currency?: string;
@@ -678,7 +678,7 @@ export interface PaymentIntentCreateParams {
     /** 1 to 99; a subscription is 1. */
     quantity?: number;
   }[];
-  /** A custom amount in the currency's smallest unit. */
+  /** A custom amount in the currency's smallest unit, instead of line_items. Secret key only. A one-time payment, never offered to a merchant of record, which sells only products: use line_items for those. */
   amount?: number;
   /** With amount: a three-letter currency code. */
   currency?: string;
