@@ -52,6 +52,6 @@ await loadShipBill("pk_live_…", {
 });
 ```
 
-The checkout opens only on the websites listed in **Website integration → Allowed websites**. If it can't be shown over the page, the buyer is taken to the checkout page instead.
+The checkout opens only on the websites listed in **Payments → Website integration → Allowed websites**. Anywhere else `onError` gets `origin_not_allowed` at once: a checkout opened by its `client_token` then opens as its own page, and a buy button's buyer sees a short message. If it can't be shown over the page for another reason, the buyer is taken to the checkout page instead.
 
 MIT licence.

@@ -352,6 +352,18 @@ export interface Product {
   after_payment_url: string | null;
   status: "active" | "archived";
   metadata: Record<string, string>;
+  /** Other products sold with it, each with its quantity by default: one-time, or on a subscription, recurring. */
+  addons: {
+    product: string;
+    quantity: number;
+    /** Offered at the checkout: a box the buyer may tick, on a buy button and with `offer_addons`. */
+    offered: boolean;
+  }[];
+  /** The range a buyer may choose from on a link's or buy button's checkout; null: off. */
+  buyer_quantity: {
+    min: number;
+    max: number;
+  } | null;
   created: number;
   updated: number;
 }
@@ -373,7 +385,16 @@ export interface PaymentLink {
   /** "paused": stopped after a spike of declined cards. */
   status: "active" | "disabled" | "paused";
   product: string;
-  /** The product's current price. */
+  /** The product's quantity, fixed; null: 1, or the buyer's choice where the product allows it. */
+  quantity: number | null;
+  /** The product's add-ons it sells, at their quantities, set when it was made. */
+  items: {
+    product: string;
+    quantity: number;
+    /** Offered, a box the buyer may tick; otherwise Included, in every sale. */
+    offered: boolean;
+  }[];
+  /** What it sells, at current prices: the product at its quantity, and the add-ons it includes. */
   amount: number | null;
   currency: string | null;
   expires_at: number | null;
@@ -385,6 +406,44 @@ export interface PaymentLink {
   coupon: string | null;
   metadata: Record<string, string>;
   created: number;
+}
+
+export interface PaymentLinkCreated {
+  id: string;
+  object: "payment_link";
+  livemode: boolean;
+  url: string;
+  label: string | null;
+  /** "paused": stopped after a spike of declined cards. */
+  status: "active" | "disabled" | "paused";
+  product: string;
+  /** The product's quantity, fixed; null: 1, or the buyer's choice where the product allows it. */
+  quantity: number | null;
+  /** The product's add-ons it sells, at their quantities, set when it was made. */
+  items: {
+    product: string;
+    quantity: number;
+    /** Offered, a box the buyer may tick; otherwise Included, in every sale. */
+    offered: boolean;
+  }[];
+  /** What it sells, at current prices: the product at its quantity, and the add-ons it includes. */
+  amount: number | null;
+  currency: string | null;
+  expires_at: number | null;
+  max_payments: number | null;
+  payments_count: number;
+  /** Whether a buyer opening it now could pay. */
+  available: boolean;
+  /** A coupon applied when the link opens; the buyer can remove it. */
+  coupon: string | null;
+  metadata: Record<string, string>;
+  created: number;
+  /** Empty when buyers can pay. Otherwise why they can't yet, and how to fix it. */
+  warnings: {
+    /** "checkout_unavailable": no enabled payment provider can take its payments yet. "items_unavailable": its products share no provider that can take them together. */
+    code: "checkout_unavailable" | "items_unavailable";
+    message: string;
+  }[];
 }
 
 export interface Coupon {
@@ -458,10 +517,23 @@ export interface Subscription {
   metadata: Record<string, string>;
   customer: string;
   customer_email: string;
-  /** The price locked when it started, before any discount; released if it lapses. */
+  /** The price locked when it started, before any discount: its items' total each period. Released if it lapses. */
   amount: number;
   currency: string;
-  /** The coupon it was bought with, which discounts its renewals for its periods. */
+  /** What renews each period: the product first, then any recurring add-ons. One-time add-ons were charged with the first payment only, so they aren't here. */
+  items: {
+    product: string;
+    quantity: number;
+    /** Locked when it started. */
+    unit_amount: number;
+    /** `unit_amount` × `quantity`, each period, before any discount. */
+    amount: number;
+    /** A recurring add-on added to it: the start of the first period it renews in. Null: from the start. */
+    starts_at: number | null;
+    /** A recurring add-on dropped from it: the end of the last period it renews in. Null: it goes on renewing. */
+    ends_at: number | null;
+  }[];
+  /** The coupon it was bought with, which discounts its renewals for its periods while the coupon is available: archived, used up, or past its end date, it stops from the next renewal, and never comes back. */
   discount: {
     coupon: string;
     code: string;
@@ -470,6 +542,10 @@ export interface Subscription {
     currency: string;
     /** Renewals still discounted after the current period: null forever, 0 done. */
     periods_remaining: number | null;
+    /** When the discount ended before its periods ran out: its coupon archived, used up, or past its end date, or ended by you. `periods_remaining` is 0 from then on. */
+    ended_at: number | null;
+    /** Why it ended early; null unless `ended_at` is set. */
+    ended_reason: "coupon_archived" | "coupon_used_up" | "coupon_ended" | "ended_by_merchant" | null;
   } | null;
   interval: "day" | "week" | "month" | "year";
   interval_count: number;
@@ -621,11 +697,11 @@ export interface ErrorBody {
 }
 
 export interface CheckoutSessionCreateParams {
-  /** What is bought: up to 20 of your products. Or send amount and currency instead. */
+  /** What is bought: up to 20 of your products. One subscription at most, the first line, with only its own add-ons after it; its one-time add-ons are charged with the first payment only. Or send amount and currency instead. */
   line_items?: {
     /** A product's ID (prod_…): its stored title and price are used. */
     product: string;
-    /** 1 to 99; a subscription is 1. */
+    /** 1 to 99. A subscription renews at this quantity for its life. */
     quantity?: number;
   }[];
   /** A custom amount in the currency's smallest unit, instead of line_items. Secret key only. A one-time payment, never offered to a merchant of record, which sells only products: use line_items for those. */
@@ -638,6 +714,16 @@ export interface CheckoutSessionCreateParams {
   reference?: string;
   /** Up to 50 of your own key/value pairs, returned with the object and its events. */
   metadata?: Record<string, string>;
+  /** Where the buyer came from, as your site remembers it. Shown in Analytics → Sources, before what the browser says. */
+  attribution?: {
+    /** The page of yours the buyer was on, such as your pricing page. Its campaign tags are read when you send none. */
+    page_url?: string;
+    /** The site that first sent the buyer to you, as your site recorded it. */
+    referrer?: string;
+    utm_source?: string;
+    utm_medium?: string;
+    utm_campaign?: string;
+  };
   /** A plan change: this subscription (sub_…) is cancelled once the new one's first payment succeeds. */
   replace_subscription?: string;
   /** The buyer, when your server knows them, so they aren't asked again. */
@@ -666,16 +752,18 @@ export interface CheckoutSessionCreateParams {
   }[];
   /** Whether the checkout offers a field for a discount code. By default, when you have an active coupon. */
   allow_discount_codes?: boolean;
+  /** true: the checkout offers the first line's product's add-ons marked Offer at the checkout, as boxes the buyer may tick, beside line_items. Those already in line_items aren't offered again. Off by default. */
+  offer_addons?: boolean;
   /** Seconds until the checkout expires: 1800 to 86400, 86400 by default. */
   expires_in?: number;
 }
 
 export interface PaymentIntentCreateParams {
-  /** What is bought: up to 20 of your products. Or send amount and currency instead. */
+  /** What is bought: up to 20 of your products. One subscription at most, the first line, with only its own add-ons after it; its one-time add-ons are charged with the first payment only. Or send amount and currency instead. */
   line_items?: {
     /** A product's ID (prod_…): its stored title and price are used. */
     product: string;
-    /** 1 to 99; a subscription is 1. */
+    /** 1 to 99. A subscription renews at this quantity for its life. */
     quantity?: number;
   }[];
   /** A custom amount in the currency's smallest unit, instead of line_items. Secret key only. A one-time payment, never offered to a merchant of record, which sells only products: use line_items for those. */
@@ -742,6 +830,20 @@ export interface ProductCreateParams {
   after_payment_url?: string | null;
   /** Up to 50 of your own key/value pairs, returned with the object and its events. */
   metadata?: Record<string, string>;
+  /** Up to 19 add-ons, other products in this product's currency, none with add-ons of its own. A payment link picks which it includes. A subscription's one-time add-ons are charged with its first payment only; its recurring add-ons, subscription products with its interval, renew with it. On an update, the whole list; omit it to leave them as they are. */
+  addons?: {
+    /** A product's ID (prod_…), in this product's currency: a one-time product, or, on a subscription, a subscription renewing as it does (a recurring add-on). */
+    product: string;
+    /** Its quantity by default: 1 to 99. */
+    quantity?: number;
+    /** Offer at the checkout: a box the buyer may tick, on a buy button that sends no selection of its own and on a session made with `offer_addons`. */
+    offered?: boolean;
+  }[];
+  /** Lets the buyer choose how many, between min and max, on a payment link's or buy button's checkout. A subscription renews at the quantity chosen. null turns it off. */
+  buyer_quantity?: {
+    min: number;
+    max: number;
+  } | null;
   /** one_time (the default), or subscription: paid again every interval_count intervals. Fixed once created. */
   type?: "one_time" | "subscription";
   /** A subscription's period. */
@@ -776,6 +878,20 @@ export interface ProductUpdateParams {
   after_payment_url?: string | null;
   /** Up to 50 of your own key/value pairs, returned with the object and its events. */
   metadata?: Record<string, string>;
+  /** Up to 19 add-ons, other products in this product's currency, none with add-ons of its own. A payment link picks which it includes. A subscription's one-time add-ons are charged with its first payment only; its recurring add-ons, subscription products with its interval, renew with it. On an update, the whole list; omit it to leave them as they are. */
+  addons?: {
+    /** A product's ID (prod_…), in this product's currency: a one-time product, or, on a subscription, a subscription renewing as it does (a recurring add-on). */
+    product: string;
+    /** Its quantity by default: 1 to 99. */
+    quantity?: number;
+    /** Offer at the checkout: a box the buyer may tick, on a buy button that sends no selection of its own and on a session made with `offer_addons`. */
+    offered?: boolean;
+  }[];
+  /** Lets the buyer choose how many, between min and max, on a payment link's or buy button's checkout. A subscription renews at the quantity chosen. null turns it off. */
+  buyer_quantity?: {
+    min: number;
+    max: number;
+  } | null;
   /** A subscription's period. */
   interval?: "day" | "week" | "month" | "year";
   /** How many intervals each period lasts; 1 by default. */
@@ -801,6 +917,17 @@ export interface ProductCategoryUpdateParams {
 export interface PaymentLinkCreateParams {
   /** The product's ID (prod_…). */
   product: string;
+  /** Which of the product's add-ons it sells, at what quantities: Included in every sale, or Offered as a box the buyer may tick. Set when it's made and never changed: to sell something else, make another link. */
+  items?: {
+    /** One of the product's add-ons (prod_…). */
+    product: string;
+    /** 1 to 99. */
+    quantity?: number;
+    /** true: Offered, a box the buyer may tick. false: Included, in every sale. */
+    offered?: boolean;
+  }[];
+  /** The product's quantity, fixed. Omitted: 1, or the buyer's choice where the product's buyer_quantity allows it. A subscription renews at it for its life. */
+  quantity?: number | null;
   /** Your own name for the link, such as a campaign. */
   label?: string | null;
   /** Unix seconds: the link stops working then. */
@@ -889,8 +1016,15 @@ export interface CouponUpdateParams {
 export interface EmbedSessionCreateParams {
   /** An active product's ID (prod_…), at its stored price. */
   product: string;
-  /** 1 by default; a subscription is 1. */
+  /** 1 by default. A subscription renews at this quantity. */
   quantity?: number;
+  /** Your page's own choice of the product's add-ons, each at its quantity; the checkout then offers none. Omitted: it offers the add-ons the product offers at the checkout. */
+  addons?: {
+    /** One of the product's add-ons (prod_…). */
+    product: string;
+    /** 1 to 99. */
+    quantity?: number;
+  }[];
   /** Fills in the buyer's email; they can still change it. */
   customer_email?: string;
   /** Your ID for the buyer, from the page. A buyer can edit it; set it from your server when it must be certain. */
@@ -899,6 +1033,8 @@ export interface EmbedSessionCreateParams {
   coupon?: string;
   /** The page the button is on, to come back to. */
   page?: string;
+  /** The site that sent the buyer to this page, its origin and path; empty when there was none. */
+  referrer?: string;
 }
 
 export interface WebhookEndpointCreateParams {
@@ -947,6 +1083,11 @@ export interface MarkRefundedParams {
 export interface SubscriptionAdvanceParams {
   /** next_reminder sends it now; due_date makes it past due; past_grace expires it. */
   to: "next_reminder" | "due_date" | "past_grace";
+}
+
+export interface SubscriptionAddonParams {
+  /** true: it renews from the next renewal, added at its price now (or a drop undone). false: it stops at the end of this period (or an addition undone). Nothing is charged or refunded at the change. */
+  renews: boolean;
 }
 
 /** Each event type, and the object its `data.object` holds. */
@@ -1404,14 +1545,27 @@ export class PaymentLinksResource {
     return this.api.list<PaymentLink>(`/payment-links`, params, options);
   }
 
-  /** Create a payment link. A link sells one product at its current price, in the key's mode. */
-  create(params: PaymentLinkCreateParams, options?: RequestOptions): Promise<PaymentLink> {
-    return this.api.request<PaymentLink>("POST", `/payment-links`, { body: params, options });
+  /** Create a payment link. A link sells one product at its current price, in the key's mode. `warnings` says what it can't do yet, such as take payments while no provider is enabled. */
+  create(params: PaymentLinkCreateParams, options?: RequestOptions): Promise<PaymentLinkCreated> {
+    return this.api.request<PaymentLinkCreated>("POST", `/payment-links`, { body: params, options });
   }
 
   /** Update a payment link. `status: "active"` also resumes a link paused after a spike of declined cards. */
   update(id: string, params: PaymentLinkUpdateParams, options?: RequestOptions): Promise<PaymentLink> {
     return this.api.request<PaymentLink>("PATCH", `/payment-links/${encodeURIComponent(id)}`, { body: params, options });
+  }
+
+  /** Delete a payment link. It leaves your lists for good, and its address stops working as a disabled link's does, never reused. A checkout already open from it can finish; payments, invoices, and analytics made through it keep it. To pause a link instead, update its `status` to `disabled`. */
+  delete(id: string, options?: RequestOptions): Promise<{
+    id: string;
+    object: "payment_link";
+    deleted: true;
+  }> {
+    return this.api.request<{
+    id: string;
+    object: "payment_link";
+    deleted: true;
+  }>("DELETE", `/payment-links/${encodeURIComponent(id)}`, { options });
   }
 }
 
@@ -1502,6 +1656,16 @@ export class SubscriptionsResource {
   /** Cancel a subscription. Reminders stop; access lasts until the period ends. The customer is told. */
   cancel(id: string, options?: RequestOptions): Promise<Subscription> {
     return this.api.request<Subscription>("POST", `/subscriptions/${encodeURIComponent(id)}/cancel`, { options });
+  }
+
+  /** End a subscription's discount. From its next renewal it's at the full price; payments already made keep their discount, and the coupon stays available to everyone else. The subscriber is told, and `subscription.updated` carries `discount.ended_at` with `ended_reason: "ended_by_merchant"`. Refused with `no_discount` when it has none to end, and with `discount_not_endable` at Creem or Whop, which can't end one. */
+  endDiscount(id: string, options?: RequestOptions): Promise<Subscription> {
+    return this.api.request<Subscription>("DELETE", `/subscriptions/${encodeURIComponent(id)}/discount`, { options });
+  }
+
+  /** Drop or add a recurring add-on. `product` is one of the subscription's product's recurring add-ons (prod_…). `renews: false` stops it at the end of this period, `renews: true` adds it from the next renewal at its price now; either undoes the other while it's still ahead. Nothing is charged or refunded at the change, and the subscriber is told. `items[].ends_at` and `starts_at` show it, and `subscription.updated` is sent. Refused with `addon_not_changeable` when the subscription isn't running, is set to end, or the product isn't one of its recurring add-ons. */
+  setAddon(id: string, product: string, params: SubscriptionAddonParams, options?: RequestOptions): Promise<Subscription> {
+    return this.api.request<Subscription>("POST", `/subscriptions/${encodeURIComponent(id)}/addons/${encodeURIComponent(product)}`, { body: params, options });
   }
 
   /** Open a checkout for the next period. For a Renew button on your site: renews an active or past-due subscription from its period end, or restarts an ended one from the payment date at the current price. */

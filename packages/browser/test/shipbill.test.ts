@@ -24,6 +24,18 @@ const API = "http://localhost:4711";
 const CHECKOUT = "http://localhost:4712";
 const TOKEN = "tok_aaaaaaaaaaaaaaaaaaaa";
 const SILENT = "tok_silentsilentsilent";
+/** A checkout the API refuses to show on this website. */
+const ELSEWHERE = "tok_elsewhereelsewhere";
+const REFUSED = "This checkout can't open on this website. If you're buying, contact the seller.";
+const notAllowed = {
+  error: {
+    type: "invalid_request_error",
+    code: "origin_not_allowed",
+    message: `${SITE} isn't in Payments → Website integration → Allowed websites. Add it there for the checkout to open on it.`,
+    param: null,
+    request_id: "req_3",
+  },
+};
 /** This release's version, as every package states it. */
 const { version: VERSION } = await Bun.file(new URL("../package.json", import.meta.url)).json();
 
@@ -38,6 +50,7 @@ const sitePage = `<!doctype html><html><head><meta charset="utf-8"><title>Shop</
 <button id="buy" data-shipbill-product="prod_basic" data-shipbill-reference="user_1" data-shipbill-email="ana@example.com">Buy Basic</button>
 <button id="inactive" data-shipbill-product="prod_inactive">Buy old</button>
 <button id="dark" data-shipbill-product="prod_basic" data-shipbill-theme="dark">Buy Basic, dark</button>
+<button id="addons" data-shipbill-product="prod_basic" data-shipbill-addons="prod_extra, prod_guide:2">Buy with add-ons</button>
 <script src="/shipbill.js"></script>
 <script>
   window.log = [];
@@ -130,6 +143,7 @@ const servers = [
       });
       const json = (data: unknown, status = 200) => Response.json(data, { status, headers: cors(origin) });
       if (url.pathname === "/v1/embed/checkout/sessions") {
+        if ((body as { product: string }).product === "prod_elsewhere") return json(notAllowed, 403);
         if ((body as { product: string }).product === "prod_inactive")
           return json(
             {
@@ -150,6 +164,10 @@ const servers = [
           expires_at: 1,
         });
       }
+      // The check before framing: this one checkout may open here, and one may not; any other is unknown (404).
+      if (url.pathname === `/v1/embed-frames/${TOKEN}`)
+        return new Response(null, { status: 204, headers: cors(origin) });
+      if (url.pathname === `/v1/embed-frames/${ELSEWHERE}`) return json(notAllowed, 403);
       if (url.pathname === "/v1/embed/prices")
         return json({
           object: "list",
@@ -238,6 +256,15 @@ afterEach(async () => {
 });
 
 describe("a buy button", () => {
+  test("data-shipbill-addons: the page's own selection, each ID with its quantity, 1 without one", async () => {
+    await page.click("#addons");
+    await page.locator("iframe[aria-label=Checkout]").waitFor();
+    expect((received[0]!.body as { addons: unknown }).addons).toEqual([
+      { product: "prod_extra", quantity: 1 },
+      { product: "prod_guide", quantity: 2 },
+    ]);
+  });
+
   test("opens the checkout over the page, framed at the checkout's address with this page", async () => {
     await page.click("#buy");
     await page.locator("iframe[aria-label=Checkout]").waitFor();
@@ -250,11 +277,18 @@ describe("a buy button", () => {
         customer_email: "ana@example.com",
         reference: "user_1",
         page: `${SITE}/`,
+        // Opened directly: no site before it, said as such.
+        referrer: "",
       },
     });
     const src = new URL((await page.locator("iframe[aria-label=Checkout]").getAttribute("src")) ?? "");
     expect(src.origin + src.pathname).toBe(`${CHECKOUT}/c/${TOKEN}`);
-    expect(Object.fromEntries(src.searchParams)).toEqual({ embed: "2", origin: SITE, page: `${SITE}/` });
+    expect(Object.fromEntries(src.searchParams)).toEqual({
+      embed: "2",
+      origin: SITE,
+      page: `${SITE}/`,
+      referrer: "",
+    });
 
     await page.waitForFunction(() => (window as unknown as { log: string[] }).log.includes("ready"));
     expect(
@@ -365,6 +399,50 @@ describe("a buy button", () => {
     expect(await frameCount()).toBe(0);
   });
 
+  test("on a website ShipBill refuses, tells the buyer and the page at once; closing that isn't a close", async () => {
+    const errors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    const code = await page.evaluate(
+      () =>
+        new Promise<string>((resolve) => {
+          (window as unknown as { refusedClosed: boolean }).refusedClosed = false;
+          window.ShipBill!.checkout.open(
+            { product: "prod_elsewhere" },
+            {
+              onError: (error) => resolve(error.code),
+              onClose: () => {
+                (window as unknown as { refusedClosed: boolean }).refusedClosed = true;
+              },
+            },
+          );
+        }),
+    );
+    expect(code).toBe("origin_not_allowed");
+    expect(errors.some((text) => text.includes("origin_not_allowed: "))).toBe(true);
+    const dialog = page.getByRole("alertdialog", { name: "Checkout unavailable" });
+    expect(await dialog.textContent()).toBe(`${REFUSED}Close`);
+    expect(await frameCount()).toBe(0);
+    await page.getByRole("button", { name: "Close" }).click();
+    expect(await dialog.count()).toBe(0);
+    expect(await page.evaluate(() => (window as unknown as { refusedClosed: boolean }).refusedClosed)).toBe(
+      false,
+    );
+    expect(await page.evaluate(() => document.documentElement.style.overflow)).toBe("");
+  });
+
+  test("passes on the site before the page, its origin and path only, from the button and the frame", async () => {
+    await page.goto(`${SITE}/landing?session=secret#top`);
+    await page.evaluate(() => location.assign("/pricing"));
+    await page.waitForURL(`${SITE}/pricing`);
+    await page.click("#buy");
+    await page.locator("iframe[aria-label=Checkout]").waitFor();
+    expect((received[0]!.body as { referrer: string }).referrer).toBe(`${SITE}/landing`);
+    const src = new URL((await page.locator("iframe[aria-label=Checkout]").getAttribute("src")) ?? "");
+    expect(src.searchParams.get("referrer")).toBe(`${SITE}/landing`);
+  });
+
   test("says why when the product can't be sold, and opens nothing", async () => {
     await page.click("#inactive");
     await page.waitForFunction(() => (window as unknown as { log: string[] }).log.length > 0);
@@ -386,7 +464,8 @@ describe("ShipBill.checkout.open", () => {
       });
     }, TOKEN);
     await page.waitForFunction(() => (window as unknown as { calls: string[] }).calls.includes("ready"));
-    expect(received).toEqual([]);
+    // Asked about first, with no key: the client_token names the checkout.
+    expect(received).toEqual([{ path: `/v1/embed-frames/${TOKEN}`, auth: null, origin: SITE, body: null }]);
     await checkoutFrame().evaluate(() =>
       (window as unknown as { post: (m: unknown) => void }).post({ type: "complete", status: "paid" }),
     );
@@ -447,6 +526,20 @@ describe("ShipBill.checkout.open", () => {
     await page.keyboard.press("Escape");
     expect(await page.evaluate(() => (window as unknown as { wasClosed: boolean }).wasClosed)).toBe(true);
     expect(await frameCount()).toBe(0);
+  });
+
+  test("on a website ShipBill refuses, opens the checkout's own page at once, after the reason and onError", async () => {
+    const said: string[] = [];
+    page.on("console", (message) => said.push(`${message.type()}: ${message.text()}`));
+    await page.evaluate((token) => {
+      window.ShipBill!.checkout.open(token, { onError: (error) => console.log(`onError ${error.code}`) });
+    }, ELSEWHERE);
+    // The page itself, not the frame's address, and well before the 15-second fallback would get there.
+    await page.waitForURL(`${CHECKOUT}/c/${ELSEWHERE}`, { timeout: 5_000 });
+    expect(said.filter((line) => line.includes("origin_not_allowed"))).toEqual([
+      `error: [ShipBill] origin_not_allowed: ${notAllowed.error.message} The checkout page opened instead of the overlay.`,
+      "log: onError origin_not_allowed",
+    ]);
   });
 
   test("refuses a malformed token, and a secret key in the page", async () => {
@@ -717,7 +810,8 @@ describe("@shipbill/js", () => {
 
 describe("the script itself", () => {
   test("is small and depends on nothing", () => {
-    expect(script.length).toBeLessThan(16 * 1024);
+    // 16 KB until 1.0.2, which filled it; 20 KB from the release that tells a refused website at once.
+    expect(script.length).toBeLessThan(20 * 1024);
     expect(script).not.toMatch(/\bimport\s*\(|\brequire\(|\bimport\s+[\w{*]/);
   });
 

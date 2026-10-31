@@ -14,8 +14,13 @@ export interface InitOptions {
 export interface BuyOptions {
   /** The product's ID (prod_…). It must be active; a buy button can't set an amount. */
   product: string;
-  /** 1 by default; a subscription is bought one at a time. */
+  /** 1 by default. A subscription renews at this quantity. */
   quantity?: number;
+  /**
+   * Your page's own choice of the product's add-ons, each at its quantity (1 by default); the checkout then offers
+   * none. Omitted: it offers the add-ons the product offers at the checkout, as boxes the buyer may tick.
+   */
+  addons?: { product: string; quantity?: number }[];
   /** Fills in the buyer's email. They can still change it. */
   customerEmail?: string;
   /**
@@ -37,7 +42,11 @@ export interface CheckoutCallbacks {
   onComplete?: (result: { status: "paid" }) => void;
   /** The buyer closed the checkout, paid or not. */
   onClose?: () => void;
-  /** The checkout couldn't open: an inactive product, a site not in Allowed websites, no connection. */
+  /**
+   * The checkout couldn't open: an inactive product, a site not in Allowed websites ("origin_not_allowed": a checkout
+   * opened by its client_token then opens as its own page, and a buy button's buyer is shown a short message), no
+   * connection.
+   */
   onError?: (error: ShipBillError) => void;
 }
 
