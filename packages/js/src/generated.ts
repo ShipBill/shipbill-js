@@ -31,8 +31,15 @@ export interface EmbedSession {
 export interface EmbedSessionCreateParams {
   /** An active product's ID (prod_…), at its stored price. */
   product: string;
-  /** 1 by default; a subscription is 1. */
+  /** 1 by default. A subscription renews at this quantity. */
   quantity?: number;
+  /** Your page's own choice of the product's add-ons, each at its quantity; the checkout then offers none. Omitted: it offers the add-ons the product offers at the checkout. */
+  addons?: {
+    /** One of the product's add-ons (prod_…). */
+    product: string;
+    /** 1 to 99. */
+    quantity?: number;
+  }[];
   /** Fills in the buyer's email; they can still change it. */
   customer_email?: string;
   /** Your ID for the buyer, from the page. A buyer can edit it; set it from your server when it must be certain. */
@@ -41,6 +48,8 @@ export interface EmbedSessionCreateParams {
   coupon?: string;
   /** The page the button is on, to come back to. */
   page?: string;
+  /** The site that sent the buyer to this page, its origin and path; empty when there was none. */
+  referrer?: string;
 }
 
 export interface ErrorBody {
@@ -58,12 +67,14 @@ export interface ErrorBody {
 export const EMBED_PROTOCOL_VERSION = 1;
 export const EMBED_MESSAGE_SOURCE = "shipbill-checkout";
 
-/** The frame's address, on the checkout's origin: `/c/<client_token>?embed=2&origin=<page origin>&page=<page URL>[&theme=<light | dark | system>]`. */
+/** The frame's address, on the checkout's origin: `/c/<client_token>?embed=2&origin=<page origin>&page=<page URL>&referrer=<the site before the page>[&theme=<light | dark | system>]`. */
 export const EMBED_FRAME = {
   path: "/c/",
   flag: ["embed", "2"],
   origin: "origin",
   page: "page",
+  /** The site before the page, its origin and path, for the merchant's analytics; empty when there was none. */
+  referrer: "referrer",
   /** Optional: this window's look, in place of the profile's checkout theme. */
   theme: "theme",
 } as const;

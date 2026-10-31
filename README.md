@@ -22,7 +22,7 @@ Examples: [a pricing page with two subscription products](examples/pricing-page)
 </script>
 ```
 
-The button opens ShipBill's checkout over your page for that product, at the price stored in ShipBill. It works only on the websites you list in **Website integration → Allowed websites**. Optional attributes: `data-shipbill-quantity`, `data-shipbill-email` (pre-filled, still editable), `data-shipbill-reference` (your ID for the buyer, returned on every event), and `data-shipbill-theme` (below). The button sends `shipbill:ready`, `shipbill:complete`, `shipbill:close`, and `shipbill:error` events, which bubble to `document`.
+The button opens ShipBill's checkout over your page for that product, at the price stored in ShipBill. It works only on the websites you list in **Payments → Website integration → Allowed websites**; anywhere else the buyer sees a short message, and the button sends `shipbill:error` with `origin_not_allowed`. Optional attributes: `data-shipbill-quantity`, `data-shipbill-email` (pre-filled, still editable), `data-shipbill-reference` (your ID for the buyer, returned on every event), and `data-shipbill-theme` (below). The button sends `shipbill:ready`, `shipbill:complete`, `shipbill:close`, and `shipbill:error` events, which bubble to `document`.
 
 ## A checkout from your server
 

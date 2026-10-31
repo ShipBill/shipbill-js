@@ -24,7 +24,8 @@ import type {
 // It holds no payment logic and no secret. It frames the checkout on ShipBill's checkout origin, listens to
 // that one origin, and acts on a small, versioned set of messages; everything about paying happens inside the
 // frame, which the page can't read. Buy buttons (`data-shipbill-product`) and price previews use the
-// publishable key, which ShipBill accepts only from the merchant's allowed websites.
+// publishable key, which ShipBill accepts only from the merchant's allowed websites; a checkout opened by its
+// client_token is asked about before it's framed, so a website ShipBill refuses is told at once.
 //
 // One exception, asked for by name: `ShipBill.mount(next_action, element)`, on a merchant's own payment page (a
 // custom checkout). For a provider with secure fields it loads that provider's small file from this release
@@ -43,6 +44,10 @@ const PUBLISHABLE_KEY = /^pk_(live|test)_\S+$/;
 /** The checkout's own backdrop colour, so nothing flickers when the frame takes over. */
 const BACKDROP = "rgba(34, 34, 34, 0.45)";
 const LOG = "[ShipBill]";
+/** What the buyer reads when ShipBill refuses a buy button's checkout on this website. */
+const REFUSED = "This checkout can't open on this website. If you're buying, contact the seller.";
+/** How long the check before framing may take; past it, the checkout is framed as if it had answered. */
+const CHECK_TIMEOUT = 5_000;
 
 class ShipBillError extends Error {
   override readonly name = "ShipBillError";
@@ -95,6 +100,19 @@ function init(publishableKey: string, options: InitOptions = {}): ShipBillApi {
 /** This page's address, for the checkout to come back to after a method that leaves for the provider's page. */
 const thisPage = () => (location.href.length <= 2000 ? location.href : null);
 
+/**
+ * The site before this page, for the merchant's analytics: its origin and path only, since a query can carry other
+ * people's tokens. Empty when there was none, which says so; a script that sends nothing is taken to be older.
+ */
+const cameFrom = () => {
+  try {
+    const url = new URL(document.referrer);
+    return `${url.origin}${url.pathname}`.slice(0, 500);
+  } catch {
+    return "";
+  }
+};
+
 async function call<T>(method: "GET" | "POST", path: string, body?: object): Promise<T> {
   if (!settings.key) throw new ShipBillError("Call ShipBill.init(publishableKey) first.", "not_initialised");
   let response: Response;
@@ -145,6 +163,8 @@ class Checkout {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private closed = false;
   private paid = false;
+  /** Refused on this website: the overlay says so until the buyer closes it, and closing isn't onClose. */
+  private refused = false;
   private readonly returnFocus = document.activeElement;
   private readonly overflow = document.documentElement.style.overflow;
 
@@ -189,18 +209,65 @@ class Checkout {
     this.overlay = overlay;
   }
 
+  /** In place of the spinner: why nothing opens, for the buyer, until they close it. */
+  private sayRefused() {
+    const overlay = this.overlay;
+    if (!overlay) return;
+    this.refused = true;
+    overlay.replaceChildren();
+    overlay.setAttribute("role", "alertdialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", "Checkout unavailable");
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) this.close();
+    });
+    const card = document.createElement("div");
+    style(card, {
+      boxSizing: "border-box",
+      maxWidth: "min(360px, calc(100vw - 32px))",
+      padding: "20px 24px",
+      borderRadius: "12px",
+      background: "#ffffff",
+      color: "rgb(34, 34, 34)",
+      font: "15px/1.45 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+      textAlign: "left",
+    });
+    const text = document.createElement("p");
+    text.textContent = REFUSED;
+    style(text, { margin: "0 0 16px" });
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = "Close";
+    style(button, {
+      display: "block",
+      marginLeft: "auto",
+      padding: "8px 16px",
+      borderRadius: "999px",
+      border: "1px solid rgba(34, 34, 34, 0.25)",
+      background: "#ffffff",
+      color: "inherit",
+      font: "inherit",
+      cursor: "pointer",
+    });
+    button.addEventListener("click", () => this.close());
+    card.append(text, button);
+    overlay.appendChild(card);
+    button.focus();
+  }
+
   show(token: string, hosted: string | null) {
     if (this.closed) return;
     if (!CLIENT_TOKEN.test(token)) {
-      this.fail(new ShipBillError("That isn't a checkout's client_token.", "invalid_client_token"));
+      this.fail(notAToken());
       return;
     }
-    const src = new URL(`${EMBED_FRAME.path}${token}`, settings.checkout);
+    const src = checkoutPage(token);
     this.hosted = hosted ?? src.href;
     src.searchParams.set(EMBED_FRAME.flag[0], EMBED_FRAME.flag[1]);
     src.searchParams.set(EMBED_FRAME.origin, location.origin);
     const page = thisPage();
     if (page) src.searchParams.set(EMBED_FRAME.page, page);
+    src.searchParams.set(EMBED_FRAME.referrer, cameFrom());
     // This window's own look, when it's one there is; otherwise the profile's applies.
     const theme = this.callbacks.theme;
     if (theme && /^(light|dark|system)$/.test(theme)) src.searchParams.set(EMBED_FRAME.theme, theme);
@@ -291,27 +358,42 @@ class Checkout {
     location.assign(target.href);
   }
 
-  /** The checkout never said it was ready: framing refused, or a very slow network. Open its page instead. */
+  /**
+   * The checkout never said it was ready: framing refused though the check before it passed, or a very slow network.
+   * Open its page instead.
+   */
   private fallBack() {
     const hosted = this.hosted;
     this.teardown();
     console.warn(
       LOG,
-      `The checkout didn't open over this page, so the checkout page opens instead. If this keeps happening, check that ${location.origin} is in Website integration → Allowed websites.`,
+      `The checkout didn't open over this page, so the checkout page opens instead. If this keeps happening, check that ${location.origin} is in Payments → Website integration → Allowed websites.`,
     );
     if (hosted) location.assign(hosted);
   }
 
-  fail(error: ShipBillError) {
-    this.teardown();
-    console.error(LOG, error.message);
+  /**
+   * It can't open. On a website ShipBill refuses, a checkout with a page of its own (one opened by its client_token)
+   * opens that page at once, after `onError`, so the sale still happens; a buy button's, which ShipBill never created,
+   * keeps the overlay saying so to the buyer. Anything else closes it.
+   */
+  fail(error: ShipBillError, page: string | null = null) {
+    const refused = error.code === "origin_not_allowed" && !this.closed;
+    const opening = refused ? page : null;
+    console.error(
+      LOG,
+      `${error.code}: ${error.message}${opening ? " The checkout page opened instead of the overlay." : ""}`,
+    );
+    if (refused && !opening) this.sayRefused();
+    else this.teardown();
     this.callbacks.onError?.(error);
+    if (opening) location.assign(opening);
   }
 
   close() {
     if (this.closed) return;
     this.teardown();
-    this.callbacks.onClose?.();
+    if (!this.refused) this.callbacks.onClose?.();
   }
 
   private teardown() {
@@ -331,6 +413,33 @@ class Checkout {
   }
 }
 
+const notAToken = () => new ShipBillError("That isn't a checkout's client_token.", "invalid_client_token");
+
+/** A checkout's own page, for the whole window: what a refused website and the 15-second fallback open. */
+const checkoutPage = (token: string) => new URL(`${EMBED_FRAME.path}${token}`, settings.checkout);
+
+/**
+ * Whether ShipBill refuses to show this checkout on this website, asked before it's framed so a refusal is said at
+ * once, not after the frame's 15 seconds. It needs no key: the client_token names the checkout. Only a refusal
+ * stops it; anything else (no answer, a checkout ShipBill doesn't know) frames it as before, where the checkout
+ * page's own frame-ancestors still decides.
+ */
+async function frameRefusal(token: string): Promise<ShipBillError | null> {
+  try {
+    const response = await fetch(`${settings.api}/v1/embed-frames/${token}`, {
+      credentials: "omit",
+      ...(AbortSignal.timeout ? { signal: AbortSignal.timeout(CHECK_TIMEOUT) } : {}),
+    });
+    if (response.status !== 403) return null;
+    const error = ((await response.json()) as ErrorBody | null)?.error;
+    return error?.code === "origin_not_allowed"
+      ? new ShipBillError(error.message, error.code, error.type, error.request_id)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function open(
   target: string | BuyOptions,
   callbacks: CheckoutOptions = {},
@@ -340,7 +449,11 @@ function open(
   const checkout = new Checkout(callbacks, button);
   current = checkout;
   if (typeof target === "string") {
-    checkout.show(target, null);
+    if (!CLIENT_TOKEN.test(target)) checkout.fail(notAToken());
+    else
+      frameRefusal(target).then((refusal) =>
+        refusal ? checkout.fail(refusal, checkoutPage(target).href) : checkout.show(target, null),
+      );
   } else if (!target || typeof target.product !== "string") {
     checkout.fail(
       new ShipBillError(
@@ -353,10 +466,16 @@ function open(
     call<EmbedSession>("POST", "/embed/checkout/sessions", {
       product: target.product,
       ...(target.quantity ? { quantity: target.quantity } : {}),
+      ...(target.addons
+        ? {
+            addons: target.addons.map((addon) => ({ product: addon.product, quantity: addon.quantity ?? 1 })),
+          }
+        : {}),
       ...(target.customerEmail ? { customer_email: target.customerEmail } : {}),
       ...(target.reference ? { reference: target.reference } : {}),
       ...(target.coupon ? { coupon: target.coupon } : {}),
       ...(page ? { page } : {}),
+      referrer: cameFrom(),
     }).then(
       (session) => checkout.show(session.client_token, session.url),
       (error: ShipBillError) => checkout.fail(error),
@@ -366,6 +485,22 @@ function open(
 }
 
 // --- Buy buttons -----------------------------------------------------------------------------------------
+
+/**
+ * `data-shipbill-addons="prod_x,prod_y:2"` as the API takes it: each ID, with the quantity after its colon (1 without
+ * one). ShipBill checks each is one of the product's add-ons and prices it.
+ */
+function addonsOf(value: string): { product: string; quantity: number }[] {
+  return value
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const [product = "", count] = part.split(":");
+      const quantity = Number(count);
+      return { product: product.trim(), quantity: Number.isInteger(quantity) && quantity > 0 ? quantity : 1 };
+    });
+}
 
 function onClick(event: MouseEvent) {
   if (
@@ -388,12 +523,15 @@ function onClick(event: MouseEvent) {
   const send = <K extends string>(name: K, detail: unknown = null) =>
     button.dispatchEvent(new CustomEvent(`shipbill:${name}`, { bubbles: true, detail }));
   const quantity = Number(button.getAttribute("data-shipbill-quantity"));
+  // The page's own choice of add-ons: "prod_x,prod_y:2", an ID with a quantity after a colon; empty, none.
+  const addons = button.getAttribute("data-shipbill-addons");
   button.setAttribute("aria-busy", "true");
   const idle = () => button.removeAttribute("aria-busy");
   open(
     {
       product: button.getAttribute("data-shipbill-product") ?? "",
       ...(Number.isInteger(quantity) && quantity > 0 ? { quantity } : {}),
+      ...(addons !== null ? { addons: addonsOf(addons) } : {}),
       ...(button.getAttribute("data-shipbill-email")
         ? { customerEmail: button.getAttribute("data-shipbill-email")! }
         : {}),

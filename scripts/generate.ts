@@ -33,7 +33,8 @@ interface Spec {
  * How each operation appears in @shipbill/node comes from the specification: its `x-shipbill-sdk` gives the
  * resource and method in lower-case words joined by underscores, dotted for a nested resource, which this
  * generator writes in JavaScript's case (`payment_intents.mark_refunded` → `paymentIntents.markRefunded`).
- * "browser" operations take the publishable key from an allowed website, and belong to shipbill.js. Every
+ * "browser" operations are called from a web page, with the publishable key or a checkout's client_token, and belong
+ * to shipbill.js. Every
  * ShipBill library reads the same names (docs: the Libraries page, "Building one for another language").
  */
 type SdkName = { resource: string; method: string } | "browser";
@@ -346,12 +347,12 @@ function protocol(spec: Spec): string {
     ? embed.frame.slice(embed.checkout_origin.length)
     : null;
   const shape = frame
-    ? /^\/(\w+)\/\{client_token\}\?(\w+)=(\w+)&(\w+)=\{page origin\}&(\w+)=\{page URL\}&(\w+)=\{theme\}$/.exec(
+    ? /^\/(\w+)\/\{client_token\}\?(\w+)=(\w+)&(\w+)=\{page origin\}&(\w+)=\{page URL\}&(\w+)=\{referrer\}&(\w+)=\{theme\}$/.exec(
         frame,
       )
     : null;
   if (!shape) throw new ContractError(`The checkout frame's address has an unknown form: ${embed.frame}`);
-  const [, prefix, flag, flagValue, origin, page, theme] = shape;
+  const [, prefix, flag, flagValue, origin, page, referrer, theme] = shape;
 
   const messages = embed.messages.oneOf;
   const byType = new Map<string, Schema>();
@@ -380,12 +381,14 @@ function protocol(spec: Spec): string {
 export const EMBED_PROTOCOL_VERSION = ${JSON.stringify(embed.version)};
 export const EMBED_MESSAGE_SOURCE = ${JSON.stringify(embed.source)};
 
-/** The frame's address, on the checkout's origin: \`/${prefix}/<client_token>?${flag}=${flagValue}&${origin}=<page origin>&${page}=<page URL>[&${theme}=<light | dark | system>]\`. */
+/** The frame's address, on the checkout's origin: \`/${prefix}/<client_token>?${flag}=${flagValue}&${origin}=<page origin>&${page}=<page URL>&${referrer}=<the site before the page>[&${theme}=<light | dark | system>]\`. */
 export const EMBED_FRAME = {
   path: ${JSON.stringify(`/${prefix}/`)},
   flag: [${JSON.stringify(flag)}, ${JSON.stringify(flagValue)}],
   origin: ${JSON.stringify(origin)},
   page: ${JSON.stringify(page)},
+  /** The site before the page, its origin and path, for the merchant's analytics; empty when there was none. */
+  referrer: ${JSON.stringify(referrer)},
   /** Optional: this window's look, in place of the profile's checkout theme. */
   theme: ${JSON.stringify(theme)},
 } as const;
