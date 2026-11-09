@@ -93,7 +93,7 @@ export interface Payment {
   id: string;
   object: "payment";
   livemode: boolean;
-  status: "requires_payment_method" | "requires_action" | "processing" | "underpaid" | "succeeded" | "failed" | "cancelled";
+  status: "requires_payment_method" | "requires_action" | "processing" | "authorized" | "underpaid" | "succeeded" | "failed" | "cancelled";
   /** In the currency's smallest unit, such as cents. */
   amount: number;
   currency: string;
@@ -1043,7 +1043,7 @@ export interface WebhookEndpointCreateParams {
   /** Your own name for it. */
   description?: string | null;
   /** The event types to send, or ["*"] for all (the default). */
-  enabled_events?: ("*" | "checkout.created" | "checkout.expired" | "payment.created" | "payment.processing" | "payment.requires_action" | "payment.succeeded" | "payment.failed" | "payment.cancelled" | "payment.refunded" | "payment.disputed" | "payment.risk_cleared" | "invoice.created" | "invoice.paid" | "invoice.expired" | "subscription.created" | "subscription.renewal_upcoming" | "subscription.renewed" | "subscription.reactivated" | "subscription.past_due" | "subscription.expired" | "subscription.cancelled" | "subscription.updated" | "payout.created" | "payout.completed" | "payout.failed")[];
+  enabled_events?: ("*" | "checkout.created" | "checkout.expired" | "payment.created" | "payment.processing" | "payment.requires_action" | "payment.authorized" | "payment.succeeded" | "payment.failed" | "payment.cancelled" | "payment.refunded" | "payment.disputed" | "payment.risk_cleared" | "invoice.created" | "invoice.paid" | "invoice.expired" | "subscription.created" | "subscription.renewal_upcoming" | "subscription.renewed" | "subscription.reactivated" | "subscription.past_due" | "subscription.expired" | "subscription.cancelled" | "subscription.updated" | "payout.created" | "payout.completed" | "payout.failed")[];
 }
 
 export interface WebhookEndpointUpdateParams {
@@ -1052,7 +1052,7 @@ export interface WebhookEndpointUpdateParams {
   /** Your own name for it. */
   description?: string | null;
   /** The event types to send, or ["*"] for all (the default). */
-  enabled_events?: ("*" | "checkout.created" | "checkout.expired" | "payment.created" | "payment.processing" | "payment.requires_action" | "payment.succeeded" | "payment.failed" | "payment.cancelled" | "payment.refunded" | "payment.disputed" | "payment.risk_cleared" | "invoice.created" | "invoice.paid" | "invoice.expired" | "subscription.created" | "subscription.renewal_upcoming" | "subscription.renewed" | "subscription.reactivated" | "subscription.past_due" | "subscription.expired" | "subscription.cancelled" | "subscription.updated" | "payout.created" | "payout.completed" | "payout.failed")[];
+  enabled_events?: ("*" | "checkout.created" | "checkout.expired" | "payment.created" | "payment.processing" | "payment.requires_action" | "payment.authorized" | "payment.succeeded" | "payment.failed" | "payment.cancelled" | "payment.refunded" | "payment.disputed" | "payment.risk_cleared" | "invoice.created" | "invoice.paid" | "invoice.expired" | "subscription.created" | "subscription.renewal_upcoming" | "subscription.renewed" | "subscription.reactivated" | "subscription.past_due" | "subscription.expired" | "subscription.cancelled" | "subscription.updated" | "payout.created" | "payout.completed" | "payout.failed")[];
   /** enabled also restarts an endpoint disabled after three days of failures. */
   status?: "enabled" | "disabled";
 }
@@ -1097,6 +1097,7 @@ export interface EventObjects {
   "payment.created": Payment;
   "payment.processing": Payment;
   "payment.requires_action": Payment;
+  "payment.authorized": Payment;
   "payment.succeeded": Payment;
   "payment.failed": Payment;
   "payment.cancelled": Payment;
@@ -1164,7 +1165,7 @@ export interface ListPaymentsParams {
   /** Unix seconds: only what was created after this, for catching up. */
   created_after?: number;
   /** Only those in this status. */
-  status?: "requires_payment_method" | "requires_action" | "processing" | "underpaid" | "succeeded" | "failed" | "cancelled";
+  status?: "requires_payment_method" | "requires_action" | "processing" | "authorized" | "underpaid" | "succeeded" | "failed" | "cancelled";
   /** Only those with this reference of yours. */
   reference?: string;
   /** Only this customer's. */
