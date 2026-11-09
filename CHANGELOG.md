@@ -2,6 +2,10 @@
 
 Versions follow [semantic versioning](https://semver.org). All three packages share one version.
 
+## 1.2.0 — 2026-11-DD
+
+- `@shipbill/node`: a payment can have the status `authorized`: the money is reserved by one of your amount rules and waits for you to approve it. Webhook endpoints can subscribe to `payment.authorized`.
+
 ## 1.1.0 — 2026-10-31
 
 - `shipbill.js`: on a website that isn't in **Payments → Website integration → Allowed websites**, `onError` (a buy button's `shipbill:error`) gets `origin_not_allowed` at once.
